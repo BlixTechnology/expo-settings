@@ -28,11 +28,10 @@
   "author": "Blix <blix.aplicativos@gmail.com> (https://github.com/BlixTechnology)",
   "license": "MIT",
   "homepage": "https://github.com/BlixTechnology/expo-settings#readme",
-  "dependencies": {},
   "devDependencies": {
     "@types/react": "~19.0.0",
-    "expo-module-scripts": "^4.1.6",
     "expo": "^50.0.21",
+    "expo-module-scripts": "^4.1.7",
     "react-native": "0.79.1"
   },
   "peerDependencies": {
