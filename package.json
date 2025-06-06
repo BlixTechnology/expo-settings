@@ -1,6 +1,6 @@
 {
   "name": "blix-expo-settings",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LiveStream",
   "main": "build/index.js",
   "types": "build/index.d.ts",

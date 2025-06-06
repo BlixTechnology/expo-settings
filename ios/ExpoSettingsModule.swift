@@ -6,6 +6,8 @@ import VideoToolbox
 public class ExpoSettingsModule: Module {
     private var rtmpConnection: RTMPConnection?
     private var rtmpStream: RTMPStream?
+    private var currentStreamStatus: String = "stopped"
+
     
     public func definition() -> ModuleDefinition {
         Name("ExpoSettings")
@@ -18,9 +20,14 @@ public class ExpoSettingsModule: Module {
         
         Events("onStreamStatus")
 
-                Function("initializePreview") { () -> Void in
+        Function("getStreamStatus") {
+          return self.currentStreamStatus
+        }
+
+        Function("initializePreview") { () -> Void in
               Task {
-                  sendEvent("onStreamStatus", ["status": "previewInitializing"])
+                  self.currentStreamStatus = "previewInitializing"
+                  sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
 
                 do {
                     
@@ -102,7 +109,8 @@ public class ExpoSettingsModule: Module {
                     )
                     stream.videoSettings = videoSettings
                 }
-                  sendEvent("onStreamStatus", ["status": "previewReady"])
+                  self.currentStreamStatus = "previewReady"
+                  sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
               }
             }
 
@@ -111,7 +119,8 @@ public class ExpoSettingsModule: Module {
 
                print("[ExpoSettings] Publishing stream to URL: \(url) with key: \(streamKey)")
          
-               sendEvent("onStreamStatus", ["status": "connecting"])
+                self.currentStreamStatus = "connecting"
+               sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
 
                // se não houve initializePreview→recria a connection
                if self.rtmpConnection == nil || self.rtmpStream == nil {
@@ -135,17 +144,21 @@ public class ExpoSettingsModule: Module {
                    // Use existing connection
                    self.rtmpConnection?.connect(url)
                }
-               
-               sendEvent("onStreamStatus", ["status": "connected"])
+               self.currentStreamStatus = "connected"
+               sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
 
-               sendEvent("onStreamStatus", ["status": "publishing"])
+              self.currentStreamStatus = "publishing"
+               sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
+
                self.rtmpStream?.publish(streamKey)
                print("[ExpoSettings] Stream published successfully")
-               sendEvent("onStreamStatus", ["status": "started"])
+
+               self.currentStreamStatus = "started"
+               sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
               }
             }
 
-                  Function("stopStream") { () -> Void in
+              Function("stopStream") { () -> Void in
                 Task {
                     print("[ExpoSettings] stopStream called")
                     
@@ -170,7 +183,9 @@ public class ExpoSettingsModule: Module {
                     self.rtmpConnection = nil
                     
                     print("[ExpoSettings] Stream and connection closed and resources released")
-                    sendEvent("onStreamStatus", ["status": "stopped"])
+
+                    self.currentStreamStatus = "stopped"
+                    sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
                 }
             }
         }
