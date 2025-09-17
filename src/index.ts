@@ -1,28 +1,38 @@
-// Reexporta o nativo (web resolve para .web.ts se existir)
-export { default } from './ExpoSettingsModule';
-export { default as ExpoSettingsView } from './ExpoSettingsView';
-export * from './ExpoSettings.types';
+import { EventEmitter, Subscription } from "expo-modules-core";
+import ExpoSettingsModule from "./ExpoSettingsModule";
+import ExpoSettingsView from './ExpoSettingsView';
 
-//Helpers
-import type { EventSubscription } from 'expo-modules-core';
-import type { LiveChangeEvent } from './ExpoSettings.types';
-import ExpoSettingsModule from './ExpoSettingsModule';
+const emitter = new EventEmitter(ExpoSettingsModule);
+
+export { ExpoSettingsView };
+
+export type LiveChangeEvent = {
+  status:
+  | "previewInitializing"
+  | "previewReady"
+  | "connecting"
+  | "connected"
+  | "publishing"
+  | "started"
+  | "stopped";
+};
 
 export function addLiveListener(
   listener: (event: LiveChangeEvent) => void
-): EventSubscription {
-  return ExpoSettingsModule.addListener('onStreamStatus', listener);
+): Subscription {
+  return emitter.addListener<LiveChangeEvent>("onStreamStatus", listener);
 }
 
-export function initializePreview(): void | Promise<void> {
+export function initializePreview(): void {
   return ExpoSettingsModule.initializePreview();
 }
 
-export function publishStream(url: string, streamKey: string): void | Promise<void> {
+// ← RENOMEADO startStream → publishStream, agora só publica
+export function publishStream(url: string, streamKey: string): void {
   return ExpoSettingsModule.publishStream(url, streamKey);
 }
 
-export function stopStream(): void | Promise<void> {
+export function stopStream(): void {
   return ExpoSettingsModule.stopStream();
 }
 

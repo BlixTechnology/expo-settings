@@ -1,20 +1,6 @@
-import type { StyleProp, ViewStyle } from 'react-native';
+import { ViewStyle } from 'react-native/types';
 
 export type ExpoSettingsViewProps = {
-  style?: StyleProp<ViewStyle>;
-};
-
-export type LiveChangeEvent = {
-  status:
-  | "previewInitializing"
-  | "previewReady"
-  | "connecting"
-  | "connected"
-  | "publishing"
-  | "started"
-  | "stopped";
-};
-
-export type ExpoSettingsEvents = {
-  onStreamStatus: (event: LiveChangeEvent) => void;
-};
+    style?: ViewStyle;
+  };
+  

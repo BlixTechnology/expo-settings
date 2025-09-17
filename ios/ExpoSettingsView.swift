@@ -27,12 +27,11 @@ public class ExpoSettingsView: ExpoView {
         print("[ExpoSettingsView] Layout updated, frame: \(bounds)")
     }
 
-    /// Na versão 2.x do HaishinKit, a MTHKView é adicionada como um output do MediaMixer ou RTMPStream.
-    /// A função attachStream direta na view não é mais utilizada.
-    // public func attachStream(_ stream: RTMPStream) {
-    //     print("[ExpoSettingsView] Attaching stream to view")
-    //     hkView.attachStream(stream)
-    // }
+    /// Conecta o RTMPStream a essa view (internamente já faz o attachCamera + renderização)
+    public func attachStream(_ stream: RTMPStream) {
+        print("[ExpoSettingsView] Attaching stream to view")
+        hkView.attachStream(stream)
+    }
     
     deinit {
         print("[ExpoSettingsView] View being deinitialized")
