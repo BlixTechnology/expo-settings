@@ -98,9 +98,9 @@ public class ExpoSettingsModule: Module {
                     stream.audioSettings = audioSettings
 
                     let videoSettings = VideoCodecSettings(
-                     videoSize: .init(width: 720, height: 1280),
-                     bitRate: 1500 * 1000, 
-                     profileLevel: kVTProfileLevel_H264_Baseline_3_1 as String,
+                     videoSize: .init(width: 1080, height: 1920),
+                     bitRate: 4000 * 1000, 
+                     profileLevel: kVTProfileLevel_H264_Baseline_4_0 as String,
                      scalingMode: .trim,
                      bitRateMode: .average,
                      maxKeyFrameIntervalDuration: 2,
