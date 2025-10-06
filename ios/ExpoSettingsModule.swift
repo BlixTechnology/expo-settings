@@ -53,7 +53,7 @@ public class ExpoSettingsModule: Module {
 
                     // 3) Configurar captura: frame rate e preset
                     stream.frameRate = 30
-                    stream.sessionPreset = .medium
+                    stream.sessionPreset = .hd1920x1080
                     stream.configuration { captureSession in
                       captureSession.automaticallyConfiguresApplicationAudioSession = true
                     }
