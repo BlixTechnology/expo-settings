@@ -77,6 +77,7 @@ public class ExpoSettingsModule: Module {
                           return
                         }
                         unit.isVideoMirrored = true
+                        unit.videoOrientation = .portrait
                         unit.preferredVideoStabilizationMode = .standard
                         unit.colorFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
                           
@@ -101,7 +102,7 @@ public class ExpoSettingsModule: Module {
                      videoSize: .init(width: 1080, height: 1920),
                      bitRate: 4000 * 1000, 
                      profileLevel: kVTProfileLevel_H264_Baseline_4_0 as String,
-                     scalingMode: .trim,
+                     scalingMode: .letterbox,
                      bitRateMode: .average,
                      maxKeyFrameIntervalDuration: 2,
                      allowFrameReordering: nil,
