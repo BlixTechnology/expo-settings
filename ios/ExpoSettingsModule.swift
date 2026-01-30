@@ -210,6 +210,7 @@ public class ExpoSettingsModule: Module {
       let session = AVAudioSession.sharedInstance()
       do {
         try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setPreferredSampleRate(44_100)
         try session.setActive(true)
         print("[ExpoSettings] ✅ AudioSession OK")
       } catch {
