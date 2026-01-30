@@ -209,8 +209,7 @@ public class ExpoSettingsModule: Module {
       // Audio session
       let session = AVAudioSession.sharedInstance()
       do {
-        try session.setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setPreferredSampleRate(44_100)
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
         print("[ExpoSettings] ✅ AudioSession OK")
       } catch {
@@ -218,6 +217,8 @@ public class ExpoSettingsModule: Module {
       }
 
       let connection = RTMPConnection()
+      self.rtmpConnection = connection
+
       let stream = RTMPStream(connection: connection)
 
       // Attach listeners
@@ -235,7 +236,6 @@ public class ExpoSettingsModule: Module {
                               selector: #selector(RTMPEventObserver.rtmpErrorHandler(_:)),
                               observer: self.rtmpObserver)
 
-      self.rtmpConnection = connection
       self.rtmpStream = stream
 
       self.rtmpObserver.onStatus = { [weak self] code, level, desc in
