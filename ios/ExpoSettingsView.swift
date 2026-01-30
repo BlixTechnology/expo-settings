@@ -11,6 +11,9 @@ public class ExpoSettingsView: ExpoView {
     return view
   }()
 
+  // Guarda stream para reattach se a view recriar/layout mudar
+  private weak var attachedStream: RTMPStream?
+
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     clipsToBounds = true
@@ -24,8 +27,10 @@ public class ExpoSettingsView: ExpoView {
     hkView.frame = bounds
   }
 
-  public func attachStream(_ stream: RTMPStream) {
-    hkView.attachStream(stream)
+  // agora aceita nil
+  public func attachStream(_ stream: RTMPStream?) {
+    attachedStream = stream
+    hkView.attachStream(stream) // normalmente aceita nil
   }
 
   deinit {
