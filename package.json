@@ -29,7 +29,6 @@
   "license": "MIT",
   "homepage": "https://github.com/BlixTechnology/expo-settings#readme",
   "devDependencies": {
-    "@react-native-community/cli-server-api": "^20.1.1",
     "@types/react": "~19.0.0",
     "expo": "^50.0.21",
     "expo-module-scripts": "^4.1.7",
@@ -39,8 +38,5 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
-  },
-  "dependencies": {
-    "expo-dev-client": "~3.3.12"
   }
 }
