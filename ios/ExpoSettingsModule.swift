@@ -37,7 +37,7 @@ public class ExpoSettingsModule: Module {
    Events("onStreamStatus", "onStreamTiming")
 
     Function("getStreamStatus") {
-      return self.currentStreamStatus
+      return self.currentStatus
     }
 
         Function("initializePreview") {
