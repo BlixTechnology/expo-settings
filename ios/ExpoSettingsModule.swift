@@ -6,8 +6,24 @@ import VideoToolbox
 public class ExpoSettingsModule: Module {
   private var rtmpConnection: RTMPConnection?
   private var rtmpStream: RTMPStream?
-  private var currentStreamStatus: String = "stopped"
+  private var currentStatus: String = "idle"
+  private var operationStartTime: Date?
 
+  // MARK: - Stream Configuration (Portrait 9:16)
+  private let videoWidth = 720
+  private let videoHeight = 1280
+  private let videoBitrate = 4_000_000
+  private let audioBitrate = 128_000
+  private let frameRate: Float64 = 30
+  private let gopSeconds: Int32 = 1
+
+  private static var audioSessionConfigured = false
+
+  private static let isoFormatter: ISO8601DateFormatter = {
+      let f = ISO8601DateFormatter()
+      f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      return f
+  }()
 
   public func definition() -> ModuleDefinition {
     Name("ExpoSettings")
@@ -18,226 +34,252 @@ public class ExpoSettingsModule: Module {
       // não precisa colocar nada aqui se você não tiver Props
     }
 
-    Events("onStreamStatus")
+   Events("onStreamStatus", "onStreamTiming")
 
     Function("getStreamStatus") {
       return self.currentStreamStatus
     }
 
-    Function("initializePreview") { () -> Void in
-      Task {
-        self.currentStreamStatus = "previewInitializing"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-
-        do {
-
-        // 0) Configura e ativa o AVAudioSession
-        let session = AVAudioSession.sharedInstance()
-        do {
-          try session.setCategory(.playAndRecord,
-                                  mode: .default,
-                                  options: [.defaultToSpeaker, .allowBluetooth])
-          try session.setActive(true)
-        } catch {
-          print("[ExpoSettings] AVAudioSession error:", error)
+        Function("initializePreview") {
+            Task { await self.initializePreview() }
         }
 
-        // 1) Conectar ao servidor RTMP, mas não publica
-        let connection = RTMPConnection()
-        self.rtmpConnection = connection
+        Function("publishStream") { (url: String, streamKey: String) in
+            Task { await self.publishStream(url: url, streamKey: streamKey) }
+        }
 
+        Function("stopStream") {
+            Task { await self.stopStream() }
+        }
+
+        Function("forceCleanup") {
+            self.cleanup()
+            self.setStatus("idle")
+        }
+    }
+
+    private func setStatus(_ status: String) {
+        guard currentStatus != status else { return }
+
+        print("[ExpoSettings] \(currentStatus) → \(status)")
+        currentStatus = status
+
+        sendEvent("onStreamStatus", [
+            "status": status,
+            "timestamp": Self.isoFormatter.string(from: Date())
+        ])
+    }
+
+    private func setupAudioSession() -> Bool {
+
+        if Self.audioSessionConfigured { return true }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetooth]
+            )
+
+            try session.setActive(true)
+
+            Self.audioSessionConfigured = true
+            print("[ExpoSettings] Audio session ready")
+            return true
+
+        } catch {
+            print("[ExpoSettings] Audio session error:", error)
+            return false
+        }
+    }
+
+    private func initializePreview() async {
+
+        print("[ExpoSettings] initializePreview")
+        operationStartTime = Date()
+
+        cleanup()
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        setStatus("previewInitializing")
+
+        guard setupAudioSession() else {
+            setStatus("error")
+            return
+        }
+
+        let connection = RTMPConnection()
         // 2) Criar RTMPStream, mas não publica pro servidor ainda
         let stream = RTMPStream(connection: connection)
+        self.rtmpConnection = connection
         self.rtmpStream = stream
-        print("[ExpoSettings] RTMPStream initialized")
 
-        // 3) Configurar captura: frame rate e preset
+        // ---------- Stream Base ----------
         stream.sessionPreset = .hd1280x720
-        stream.frameRate = 30
+        stream.frameRate = frameRate
         stream.videoOrientation = .portrait
         stream.configuration { captureSession in
           captureSession.automaticallyConfiguresApplicationAudioSession = true
         }
 
-        // 4) Configurar áudio: anexa microfone
-        if let audioDevice = AVCaptureDevice.default(for: .audio) {
-          print("[ExpoSettings] Attaching audio device")
-          stream.attachAudio(audioDevice)
-        } else {
-          print("[ExpoSettings] No audio device found")
-        }
-
-        // 5) Configurar vídeo: anexa câmera frontal
-        if let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                               for: .video,
-                                               position: .front) {
-          print("[ExpoSettings] Attaching camera device")
-          stream.attachCamera(camera) { videoUnit, error in
-            guard let unit = videoUnit else {
-              print("[ExpoSettings] attachCamera error:", error?.localizedDescription ?? "unknown")
-              return
-            }
-            unit.isVideoMirrored = true
-            unit.videoOrientation = .portrait
-            unit.preferredVideoStabilizationMode = .standard
-            unit.colorFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-
-          }
-          if let preview = await ExpoSettingsView.current {
-            print("[ExpoSettings] Attaching stream to preview view")
-            await preview.attachStream(stream)
-          } else {
-            print("[ExpoSettings] ERROR: Preview view not found!")
-          }
-        } else {
-          print("[ExpoSettings] No camera device found")
-        }
-
-        //6) Definir configurações de codec
-        print("[ExpoSettings] Setting audio and video codecs")
-        var audioSettings = AudioCodecSettings()
-        audioSettings.bitRate = 128 * 1000
-        stream.audioSettings = audioSettings
-
-        let videoSettings = VideoCodecSettings(
-        videoSize: .init(width: 720, height: 1280),
-        bitRate: 4000 * 1000, 
-        profileLevel: kVTProfileLevel_H264_Baseline_3_1 as String,
-        scalingMode: .trim,
-        bitRateMode: .average,
-       maxKeyFrameIntervalDuration: 2,
-        allowFrameReordering: nil,
-        isHardwareEncoderEnabled: true
+        // ---------- Audio ----------
+        stream.audioSettings = AudioCodecSettings(
+            bitRate: audioBitrate
         )
-        stream.videoSettings = videoSettings
-      }
-        self.currentStreamStatus = "previewReady"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-      }
-    }
 
-    Function("publishStream") { (url: String, streamKey: String) -> Void in
-      Task {
-
-        print("[ExpoSettings] Publishing stream to URL: \(url) with key: \(streamKey)")
-
-        self.currentStreamStatus = "connecting"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-
-        // se não houve initializePreview→recria a connection
-        if self.rtmpConnection == nil || self.rtmpStream == nil {
-          print("[ExpoSettings] WARNING: Connection or stream not initialized, creating new ones")
-          // Create new connection
-          let connection = RTMPConnection()
-          self.rtmpConnection = connection
-
-          // Create new stream
-          let stream = RTMPStream(connection: connection)
-          self.rtmpStream = stream
-
-          // Captura: preset antes do FPS + orientação no stream
-          stream.sessionPreset = .hd1280x720
-          stream.frameRate = 30
-          stream.videoOrientation = .portrait
-          stream.configuration { captureSession in
-            captureSession.automaticallyConfiguresApplicationAudioSession = true
-          }
-
-          // Áudio
-          if let audioDevice = AVCaptureDevice.default(for: .audio) {
-            stream.attachAudio(audioDevice)
-          }
-
-          if let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                                 for: .video,
-                                                 position: .front) {
-            stream.attachCamera(camera) { videoUnit, error in
-              guard let unit = videoUnit else {
-                print("[ExpoSettings] attachCamera error:", error?.localizedDescription ?? "unknown")
-                return
-              }
-              unit.isVideoMirrored = true
-              unit.videoOrientation = .portrait
-              unit.preferredVideoStabilizationMode = .standard
-              unit.colorFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-            }
-          }
-
-          // Attach preview (se existir)
-          if let preview = await ExpoSettingsView.current {
-            await preview.attachStream(stream)
-          } else {
-            print("[ExpoSettings] ERROR: Preview view not found during publish!")
-          }
-
-          var audioSettings = AudioCodecSettings()
-          audioSettings.bitRate = 128 * 1000 // 128 kbps
-          stream.audioSettings = audioSettings
-
-          // Vídeo
-          let videoSettings = VideoCodecSettings(
-            videoSize: .init(width: 720, height: 1280),
-            bitRate: 4000 * 1000, // 4 Mbps
-            profileLevel: kVTProfileLevel_H264_Baseline_3_1 as String,
-            scalingMode: .trim,
+        // ---------- Video ----------
+        stream.videoSettings = VideoCodecSettings(
+            videoSize: .init(width: videoWidth, height: videoHeight),
+            bitRate: videoBitrate,
+            profileLevel: kVTProfileLevel_H264_Main_4_1 as String,
+            scalingMode: .letterbox,
             bitRateMode: .average,
-            maxKeyFrameIntervalDuration: 2,
+            maxKeyFrameIntervalDuration: gopSeconds,
             allowFrameReordering: nil,
             isHardwareEncoderEnabled: true
-          )
-          stream.videoSettings = videoSettings
+        )
 
-          self.currentStreamStatus = "previewReady"
-          sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-          
-          connection.connect(url)
+        // ---------- Attach Audio ----------
+        if let mic = AVCaptureDevice.default(for: .audio) {
+            stream.attachAudio(mic)
+        }
+
+        // ---------- Attach Camera ----------
+        if let cam = AVCaptureDevice.default(
+            .builtInWideAngleCamera,
+            for: .video,
+            position: .front
+        ) {
+            stream.attachCamera(cam) { unit, _ in
+                guard let unit else { return }
+                unit.videoOrientation = .portrait
+                unit.isVideoMirrored = true
+                unit.preferredVideoStabilizationMode = .standard
+                unit.colorFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            }
+        }
+
+        // ---------- Preview ----------
+        if let preview = await ExpoSettingsView.current {
+            await preview.attachStream(stream)
         } else {
-          // Use existing connection
-          self.rtmpConnection?.connect(url)
+            print("[ExpoSettings] ERROR: Preview view not found during publish!")
         }
-        self.currentStreamStatus = "connected"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
 
-        self.currentStreamStatus = "publishing"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
+        let ms = Int(Date().timeIntervalSince(operationStartTime!) * 1000)
 
-        self.rtmpStream?.publish(streamKey)
-        print("[ExpoSettings] Stream published successfully")
+        print("[ExpoSettings] Preview ready in \(ms)ms")
+        setStatus("previewReady")
 
-        self.currentStreamStatus = "started"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-      }
+        sendEvent("onStreamTiming", [
+            "event": "previewReady",
+            "durationMs": ms
+        ])
     }
 
-    Function("stopStream") { () -> Void in
-      Task {
-        print("[ExpoSettings] stopStream called")
+    private func publishStream(url: String, streamKey: String) async {
 
-        // Primeiro pare a publicação (se estiver publicando)
-        if let stream = self.rtmpStream {
-          print("[ExpoSettings] Stopping stream publication")
-          stream.close()
-
-          // Desanexa a câmera e o áudio para liberar recursos
-          stream.attachCamera(nil)
-          stream.attachAudio(nil)
+        guard let connection = rtmpConnection,
+              let stream = rtmpStream else {
+            setStatus("error")
+            return
         }
 
-        // Depois feche a conexão RTMP
-        if let connection = self.rtmpConnection {
-          print("[ExpoSettings] Closing RTMP connection")
-          connection.close()
+        operationStartTime = Date()
+        setStatus("connecting")
+
+        self.rtmpConnection?.connect(url)
+
+        let deadline = Date().addingTimeInterval(10)
+
+        while Date() < deadline {
+            if connection.connected { break }
+            try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
-        // Limpe as referências
-        self.rtmpStream = nil
-        self.rtmpConnection = nil
+        guard connection.connected else {
+            print("[ExpoSettings] Connect timeout")
+            setStatus("error")
+            return
+        }
 
-        print("[ExpoSettings] Stream and connection closed and resources released")
+        setStatus("connected")
+        try? await Task.sleep(nanoseconds: 150_000_000)
 
-        self.currentStreamStatus = "stopped"
-        sendEvent("onStreamStatus", ["status": self.currentStreamStatus])
-      }
+        setStatus("publishing")
+        stream.publish(streamKey)
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        let ms = Int(Date().timeIntervalSince(operationStartTime!) * 1000)
+
+        print("[ExpoSettings] STREAM STARTED in \(ms)ms")
+
+        setStatus("started")
+
+        sendEvent("onStreamTiming", [
+            "event": "firstDataSent",
+            "delayMs": ms,
+            "timestamp": Self.isoFormatter.string(from: Date())
+        ])
     }
-  }
+
+    private func stopStream() async {
+
+        print("[ExpoSettings] stopStream")
+
+        guard let stream = rtmpStream,
+              let connection = rtmpConnection else {
+            cleanup()
+            setStatus("stopped")
+            return
+        }
+
+        operationStartTime = Date()
+        setStatus("stopping")
+
+        // Stop capture
+        stream.attachCamera(nil)
+        stream.attachAudio(nil)
+
+        // Flush encoder (GOP + 0.5s)
+        let flushNs = UInt64(gopSeconds) * 1_000_000_000 + 500_000_000
+        try? await Task.sleep(nanoseconds: flushNs)
+
+        // Close stream
+        stream.close()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        // Close socket
+        connection.close()
+
+        cleanup()
+
+        let ms = Int(Date().timeIntervalSince(operationStartTime!) * 1000)
+
+        print("[ExpoSettings] STOPPED in \(ms)ms")
+
+        setStatus("stopped")
+
+        sendEvent("onStreamTiming", [
+            "event": "shutdownComplete",
+            "totalDurationMs": ms,
+            "timestamp": Self.isoFormatter.string(from: Date())
+        ])
+    }
+
+    private func cleanup() {
+
+        print("[ExpoSettings] Cleanup")
+
+        rtmpStream?.attachCamera(nil)
+        rtmpStream?.attachAudio(nil)
+        rtmpStream?.close()
+        rtmpStream = nil
+
+        rtmpConnection?.close()
+        rtmpConnection = nil
+    }
 }
